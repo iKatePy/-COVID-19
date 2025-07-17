@@ -1,0 +1,87 @@
+services:
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop2.7.4-java8
+    platform: linux/amd64
+    container_name: namenode
+    environment:
+      - CLUSTER_NAME=local-hadoop
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
+      - HDFS_CONF_dfs_namenode_http-address=0.0.0.0:50070   # исправлено на 50070
+    ports:
+      - "50070:50070"   # Web UI Hadoop NameNode (исправлено)
+      - "9000:9000"     # HDFS NameNode RPC
+    volumes:
+      - /home/kate/DBproject/hadoop_namenode:/hadoop/dfs/name
+    networks:
+      - hadoopnet
+
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop2.7.4-java8
+    platform: linux/amd64
+    container_name: datanode
+    depends_on:
+      - namenode
+    environment:
+      - CLUSTER_NAME=local-hadoop
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
+      - HDFS_CONF_dfs_datanode_address=0.0.0.0:50010
+      - HDFS_CONF_dfs_datanode_http-address=0.0.0.0:9864
+    ports:
+      - "9864:9864"   # Web UI Hadoop DataNode
+    volumes:
+      - /home/kate/DBproject/hadoop_datanode:/hadoop/dfs/data
+    networks:
+      - hadoopnet
+
+  spark-master:
+    image: bitnami/spark:3.3
+    container_name: spark-master
+    environment:
+      - SPARK_MODE=master
+      - SPARK_MASTER_HOST=spark-master
+    ports:
+      - "8080:8080"   # Spark Master Web UI
+      - "7077:7077"   # Spark Master port
+    depends_on:
+      - namenode
+    networks:
+      - hadoopnet
+    volumes:
+      - /home/kate/DBproject:/opt/project
+
+  spark-worker:
+    image: bitnami/spark:3.3
+    container_name: spark-worker
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+    ports:
+      - "8081:8081"   # Spark Worker Web UI
+    depends_on:
+      - spark-master
+    networks:
+      - hadoopnet
+
+  jupyter:
+    image: jupyter/pyspark-notebook
+    container_name: jupyter
+    ports:
+      - "8888:8888"
+    environment:
+      - SPARK_OPTS=--conf spark.hadoop.fs.defaultFS=hdfs://namenode:9000
+      - HADOOP_CONF_DIR=/etc/hadoop/conf
+    volumes:
+      - /home/kate/DBproject:/home/jovyan/work
+    depends_on:
+      - spark-master
+      - namenode
+    networks:
+      - hadoopnet
+
+volumes:
+  hadoop_namenode:
+  hadoop_datanode:
+
+networks:
+  hadoopnet:
+    driver: bridge
